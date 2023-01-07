@@ -1,14 +1,17 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use futures::{future::BoxFuture, Sink, SinkExt, Stream, TryStreamExt};
 use serde::{Deserialize, Serialize};
 
 use crate::{Error, ErrorCode, Request, Response};
 
-type InnerServerHandler =
+type ServerHandler =
     Box<dyn FnMut(Option<usize>, serde_json::Value) -> Result<Option<String>, ErrorCode> + 'static>;
 
-type InnerAsyncServerHandler = Box<
+type AsyncServerHandler = Box<
     dyn FnMut(
             Option<usize>,
             serde_json::Value,
@@ -16,20 +19,21 @@ type InnerAsyncServerHandler = Box<
         + 'static,
 >;
 
+type HandlerCloner<Handler> = Box<dyn FnMut() -> Handler>;
+
 /// JSONRPC server context structure.
 ///
-///
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Server {
-    methods: HashMap<String, InnerServerHandler>,
-    async_methods: HashMap<String, InnerAsyncServerHandler>,
+    methods: Arc<Mutex<HashMap<String, HandlerCloner<ServerHandler>>>>,
+    async_methods: Arc<Mutex<HashMap<String, HandlerCloner<AsyncServerHandler>>>>,
 }
 
 impl Server {
     /// Register jsonrpc server sync handler
-    pub fn handle<P, R, F>(mut self, method: &'static str, mut f: F) -> Self
+    pub fn handle<P, R, F>(self, method: &'static str, mut f: F) -> Self
     where
-        F: FnMut(P) -> Result<Option<R>, ErrorCode> + 'static,
+        F: FnMut(P) -> Result<Option<R>, ErrorCode> + 'static + Clone,
         for<'a> P: Deserialize<'a> + Serialize,
         R: Serialize + Default,
     {
@@ -72,7 +76,10 @@ impl Server {
             Ok(None)
         };
 
-        self.methods.insert(method.to_string(), Box::new(handler));
+        self.methods.lock().unwrap().insert(
+            method.to_string(),
+            Box::new(move || Box::new(handler.clone())),
+        );
 
         self
     }
@@ -80,7 +87,7 @@ impl Server {
     /// Register jsonrpc server async handler
     ///
     /// The register async handler be required to implement [`Clone`] trait.
-    pub fn async_handle<P, R, F, FR>(mut self, method: &'static str, f: F) -> Self
+    pub fn async_handle<P, R, F, FR>(self, method: &'static str, f: F) -> Self
     where
         F: FnMut(P) -> FR + 'static + Sync + Send + Clone,
         FR: std::future::Future<Output = Result<Option<R>, ErrorCode>> + Sync + Send + 'static,
@@ -131,8 +138,10 @@ impl Server {
             })
         };
 
-        self.async_methods
-            .insert(method.to_string(), Box::new(handler));
+        self.async_methods.lock().unwrap().insert(
+            method.to_string(),
+            Box::new(move || Box::new(handler.clone())),
+        );
 
         self
     }
@@ -150,7 +159,21 @@ impl Server {
         while let Some(next) = input.try_next().await? {
             match serde_json::from_str::<Request<&str, serde_json::Value>>(&next) {
                 Ok(request) => {
-                    if let Some(handler) = self.methods.get_mut(request.method) {
+                    let handler = self
+                        .methods
+                        .lock()
+                        .unwrap()
+                        .get_mut(request.method)
+                        .map(|h| h());
+
+                    let async_handler = self
+                        .async_methods
+                        .lock()
+                        .unwrap()
+                        .get_mut(request.method)
+                        .map(|h| h());
+
+                    if let Some(mut handler) = handler {
                         // Call sync server handler
                         Self::handle_resp(
                             request.id,
@@ -159,7 +182,7 @@ impl Server {
                             &mut output,
                         )
                         .await?;
-                    } else if let Some(handler) = self.async_methods.get_mut(request.method) {
+                    } else if let Some(mut handler) = async_handler {
                         // Call async server handler
 
                         Self::handle_resp(

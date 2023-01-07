@@ -73,9 +73,39 @@ where
     pub error: Option<Error<S, D>>,
 }
 
+/// JSONRPC type compatible with both [`Request`] and [`Response`] data structures
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+struct JSONRPC<S, P, R, D> {
+    /// An identifier established by the Client that MUST contain a String, Number,
+    /// or NULL value if included. If it is not included it is assumed to be a notification.
+    /// The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<usize>,
+    /// A String specifying the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    pub jsonrpc: Version,
+    /// A String containing the name of the method to be invoked. Method names
+    /// that begin with the word rpc followed by a period character (U+002E or ASCII 46)
+    /// are reserved for rpc-internal methods and extensions and MUST NOT be used for anything else
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<S>,
+    /// A Structured value that holds the parameter values to be used during the invocation of the method. This member MAY be omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<P>,
+    /// This member is REQUIRED on success.
+    /// This member MUST NOT exist if there was an error invoking the method.
+    /// The value of this member is determined by the method invoked on the Server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<R>,
+
+    ///This member is REQUIRED on error.
+    /// This member MUST NOT exist if there was no error triggered during invocation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<Error<S, D>>,
+}
+
 /// When a rpc call encounters an error,
 /// the Response Object MUST contain the error member with a value that is a Object.
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Error<S, D> {
     /// A Number that indicates the error type that occurred.
     pub code: ErrorCode,
