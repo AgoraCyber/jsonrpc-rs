@@ -8,18 +8,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, ErrorCode, Request, Response};
 
-type ServerHandler =
-    Box<dyn FnMut(Option<usize>, serde_json::Value) -> Result<Option<String>, ErrorCode> + 'static>;
+type ServerHandler = Box<
+    dyn FnMut(Option<usize>, serde_json::Value) -> Result<Option<String>, ErrorCode>
+        + Sync
+        + Send
+        + 'static,
+>;
 
 type AsyncServerHandler = Box<
     dyn FnMut(
             Option<usize>,
             serde_json::Value,
         ) -> BoxFuture<'static, Result<Option<String>, ErrorCode>>
+        + Sync
+        + Send
         + 'static,
 >;
 
-type HandlerCloner<Handler> = Box<dyn FnMut() -> Handler>;
+type HandlerCloner<Handler> = Box<dyn FnMut() -> Handler + Sync + Send>;
 
 /// JSONRPC server context structure.
 ///
@@ -33,7 +39,7 @@ impl Server {
     /// Register jsonrpc server sync handler
     pub fn handle<P, R, F>(self, method: &'static str, mut f: F) -> Self
     where
-        F: FnMut(P) -> Result<Option<R>, ErrorCode> + 'static + Clone,
+        F: FnMut(P) -> Result<Option<R>, ErrorCode> + 'static + Clone + Sync + Send,
         for<'a> P: Deserialize<'a> + Serialize,
         R: Serialize + Default,
     {

@@ -209,10 +209,10 @@ mod tests {
     use futures::{sink, stream};
     use serde_json::json;
 
-    use crate::{Client, Error, ErrorCode};
+    use crate::{Client, Error, ErrorCode, RPCResult};
 
     #[async_std::test]
-    async fn test_client() -> Result<(), Error<String, ()>> {
+    async fn test_client() -> RPCResult<()> {
         _ = pretty_env_logger::try_init();
 
         let input = stream::iter(vec![
