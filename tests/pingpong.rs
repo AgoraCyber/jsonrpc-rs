@@ -3,7 +3,7 @@ use std::time::Duration;
 use async_std::{stream::StreamExt, task::spawn};
 use async_timer::{hashed::Timeout, Timer};
 use futures::channel::mpsc;
-use jsonrpc_rs::{Client, RPCResult, Server};
+use jsonrpc_rs::{Client, Error, RPCResult, Server};
 
 #[async_std::test]
 async fn pingpong() -> RPCResult<()> {
@@ -48,6 +48,17 @@ async fn pingpong() -> RPCResult<()> {
         .await?;
 
     assert_eq!(echo, "world");
+
+    let mut client2 = client.clone();
+
+    spawn(async move {
+        let echo: String = client2.call("echo", "clone_instance").await?;
+
+        assert_eq!(echo, "clone_instance");
+
+        Ok::<(), Error<String, ()>>(())
+    })
+    .await?;
 
     Ok(())
 }

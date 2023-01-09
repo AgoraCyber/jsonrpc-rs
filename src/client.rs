@@ -1,24 +1,63 @@
+use async_timer::hashed::Timeout;
 use completeq_rs::{
     oneshot::{CompleteQ, EventReceiver},
     user_event::RequestId,
-    Timer, TimerWithContext,
+    Timer,
 };
-use futures::{executor::ThreadPool, task::SpawnExt, Future, Sink, SinkExt, Stream, TryStreamExt};
+use futures::{executor::ThreadPool, task::SpawnExt, Sink, SinkExt, Stream, TryStreamExt};
 
 use once_cell::sync::OnceCell;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, ErrorCode, RPCResult, Request, Response};
+use crate::{Error, RPCResult, Request, Response};
 #[derive(Clone)]
 struct EventArgument(RPCResult<serde_json::Value>);
+
+type RPCEvent = RequestId<EventArgument>;
+
+async fn response_loop<Input, E>(mut input: Input, completed_q: CompleteQ<RPCEvent>)
+where
+    Input: Stream<Item = Result<String, E>> + Unpin + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    loop {
+        let data = match input.try_next().await {
+            Ok(Some(data)) => data,
+            Err(err) => {
+                log::error!("Error raise from input stream {}", err);
+                break;
+            }
+            _ => {
+                log::info!("Input stream closed");
+                break;
+            }
+        };
+
+        let response = serde_json::from_str::<Response<String, serde_json::Value, ()>>(&data)
+            .map_err(|e| Error::<String, ()>::from(e));
+
+        match response {
+            Ok(response) => {
+                if let Some(result) = response.result {
+                    completed_q.complete_one(response.id, EventArgument(Ok(result)));
+                } else if let Some(err) = response.error {
+                    completed_q.complete_one(response.id, EventArgument(Err(err)));
+                }
+            }
+            Err(err) => {
+                log::trace!("recv unexpect response, {}", err.message);
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Client<Output> {
     /// Output stream
     output: Output,
 
-    completed_q: CompleteQ<RequestId<EventArgument>>,
+    completed_q: CompleteQ<RPCEvent>,
 }
 
 impl<Output, E> Client<Output>
@@ -32,56 +71,15 @@ where
     ///
     /// * `input` - A [`futures::Stream`] instance channel on that recv JSONRPC message from server
     /// * `output` - A [`futures::Sink`] instance channel on that send JSONRPC message to server
-    pub fn new<Input>(mut input: Input, output: Output, executor: Option<ThreadPool>) -> Self
+    pub fn new<Input>(input: Input, output: Output, executor: Option<ThreadPool>) -> Self
     where
         Input: Stream<Item = Result<String, E>> + Unpin + Send + Sync + 'static,
     {
         let executor = executor.unwrap_or(global_executor().clone());
 
-        let completed_q: CompleteQ<RequestId<EventArgument>> = CompleteQ::new();
+        let completed_q: CompleteQ<RPCEvent> = CompleteQ::new();
 
-        let recv_loop_callbacks = completed_q.clone();
-
-        let recv_loop = async move {
-            loop {
-                let data = match input.try_next().await {
-                    Ok(Some(data)) => data,
-                    Err(err) => {
-                        log::error!("Error raise from input stream {}", err);
-                        break;
-                    }
-                    _ => {
-                        log::info!("Input stream closed");
-                        break;
-                    }
-                };
-
-                let response = serde_json::from_str::<Response<String, serde_json::Value, ()>>(
-                    &data,
-                )
-                .map_err(|e| Error::<String, ()> {
-                    code: ErrorCode::ParseError,
-                    message: format!("Parse response error, {}\r\t{}", e, data),
-                    data: None,
-                });
-
-                match response {
-                    Ok(response) => {
-                        if let Some(result) = response.result {
-                            recv_loop_callbacks
-                                .complete_one(response.id, EventArgument(Ok(result)));
-                        } else if let Some(err) = response.error {
-                            recv_loop_callbacks.complete_one(response.id, EventArgument(Err(err)));
-                        }
-                    }
-                    Err(err) => {
-                        log::trace!("recv unexpect response, {}", err.message);
-                    }
-                }
-            }
-        };
-
-        _ = executor.spawn(recv_loop);
+        _ = executor.spawn(response_loop(input, completed_q.clone()));
 
         Self {
             output,
@@ -90,14 +88,9 @@ where
         }
     }
 
-    pub fn call<'a, P, R>(
-        &'a mut self,
-        method: &str,
-        params: P,
-    ) -> impl Future<Output = Result<R, Error<String, ()>>> + 'a
+    pub async fn send<P>(&mut self, method: &str, params: P) -> RPCResult<Responser<Timeout>>
     where
         P: Default + Serialize,
-        for<'b> R: Deserialize<'b> + Send + 'static,
     {
         let receiver = self.completed_q.wait_one();
 
@@ -110,19 +103,33 @@ where
 
         let data = serde_json::to_string(&request).expect("Inner error, assembly json request");
 
-        self.send_request(receiver, data)
+        self.output
+            .send(data)
+            .await
+            .map_err(|e| Error::<String, ()>::from_std_error(e))?;
+
+        Ok(Responser {
+            receiver: Some(receiver),
+        })
     }
 
-    pub fn call_with_timer<'a, P, R, T>(
-        &'a mut self,
-        method: &str,
-        params: P,
-        timer: T,
-    ) -> impl Future<Output = RPCResult<R>> + 'a
+    pub async fn call<P, R>(&mut self, method: &str, params: P) -> RPCResult<R>
     where
         P: Default + Serialize,
         for<'b> R: Deserialize<'b> + Send + 'static,
-        T: TimerWithContext + Unpin + 'static,
+    {
+        self.send(method, params).await?.recv().await
+    }
+
+    pub async fn send_with_timer<P, T>(
+        &mut self,
+        method: &str,
+        params: P,
+        timer: T,
+    ) -> RPCResult<Responser<T>>
+    where
+        P: Default + Serialize,
+        T: Timer + Unpin + 'static,
     {
         let receiver = self.completed_q.wait_one_with_timer(timer);
 
@@ -135,41 +142,31 @@ where
 
         let data = serde_json::to_string(&request).expect("Inner error, assembly json request");
 
-        self.send_request(receiver, data)
-    }
-
-    async fn send_request<R, T: Timer + Unpin>(
-        &mut self,
-        receiver: EventReceiver<RequestId<EventArgument>, T>,
-        data: String,
-    ) -> RPCResult<R>
-    where
-        for<'b> R: Deserialize<'b> + Send + 'static,
-    {
         self.output
             .send(data)
             .await
-            .map_err(|e| Error::<String, ()> {
-                code: ErrorCode::InternalError,
-                message: format!("Send message failed, {}", e),
-                data: None,
-            })?;
+            .map_err(|e| Error::<String, ()>::from_std_error(e))?;
 
-        let value = receiver
-            .await
-            .success()
-            .map_err(|err| Error::<String, ()> {
-                code: ErrorCode::InternalError,
-                message: format!("Send message failed, {}", err),
-                data: None,
-            })?
-            .0?;
-
-        serde_json::from_value(value.clone()).map_err(|e| Error::<String, ()> {
-            code: ErrorCode::ParseError,
-            message: format!("Parse response error, {}\r\t{}", e, value),
-            data: None,
+        Ok(Responser {
+            receiver: Some(receiver),
         })
+    }
+
+    pub async fn call_with_timer<P, T, R>(
+        &mut self,
+        method: &str,
+        params: P,
+        timer: T,
+    ) -> RPCResult<R>
+    where
+        T: Timer + Unpin + 'static,
+        P: Default + Serialize,
+        for<'b> R: Deserialize<'b> + Send + 'static,
+    {
+        self.send_with_timer(method, params, timer)
+            .await?
+            .recv()
+            .await
     }
 
     pub async fn notification<P>(&mut self, method: &str, params: P) -> anyhow::Result<()>
@@ -190,6 +187,31 @@ where
     }
 }
 
+pub struct Responser<T: Timer> {
+    receiver: Option<EventReceiver<RPCEvent, T>>,
+}
+
+impl<T: Timer> Responser<T>
+where
+    T: Unpin,
+{
+    pub async fn recv<R>(&mut self) -> RPCResult<R>
+    where
+        for<'b> R: Deserialize<'b> + Send + 'static,
+    {
+        let value = self
+            .receiver
+            .take()
+            .unwrap()
+            .await
+            .success()
+            .map_err(|err| Error::<String, ()>::from(err))?
+            .0?;
+
+        serde_json::from_value(value.clone()).map_err(|e| Error::<String, ()>::from(e))
+    }
+}
+
 /// Accesss global static rpc executor instance
 pub fn global_executor() -> &'static ThreadPool {
     static INSTANCE: OnceCell<ThreadPool> = OnceCell::new();
@@ -207,7 +229,6 @@ mod tests {
     use async_timer::{hashed::Timeout, Timer};
     use completeq_rs::error::CompleteQError;
     use futures::{sink, stream};
-    use serde_json::json;
 
     use crate::{Client, Error, ErrorCode, RPCResult};
 
@@ -215,20 +236,7 @@ mod tests {
     async fn test_client() -> RPCResult<()> {
         _ = pretty_env_logger::try_init();
 
-        let input = stream::iter(vec![
-            Ok(json!({
-                "result":"hello",
-                "jsonrpc":"2.0",
-                "id":1
-            })
-            .to_string()),
-            Ok(json!({
-                "result":"world",
-                "jsonrpc":"2.0",
-                "id":2
-            })
-            .to_string()),
-        ]);
+        let input = stream::iter(vec![]);
 
         let result = Arc::new(Mutex::new(vec![]));
 
@@ -249,7 +257,7 @@ mod tests {
             result,
             Err(Error::<String, ()> {
                 code: ErrorCode::InternalError,
-                message: format!("Send message failed, {}", CompleteQError::Timeout),
+                message: format!("RPC call channel broken: {}", CompleteQError::Timeout),
                 data: None,
             })
         );

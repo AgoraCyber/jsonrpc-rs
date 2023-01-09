@@ -1,3 +1,4 @@
+use completeq_rs::error::CompleteQError;
 use serde::*;
 
 /// A rpc call is represented by sending a Request object to a Server.  
@@ -117,6 +118,39 @@ pub struct Error<S, D> {
     /// The value of this member is defined by the Server (e.g. detailed error information, nested errors etc.).
     ///
     pub data: Option<D>,
+}
+
+impl From<serde_json::Error> for Error<String, ()> {
+    fn from(err: serde_json::Error) -> Self {
+        Self {
+            code: ErrorCode::ParseError,
+            message: format!("Serialize/Deserialize json data error: {}", err),
+            data: None,
+        }
+    }
+}
+
+impl From<CompleteQError> for Error<String, ()> {
+    fn from(err: CompleteQError) -> Self {
+        Self {
+            code: ErrorCode::InternalError,
+            message: format!("RPC call channel broken: {}", err),
+            data: None,
+        }
+    }
+}
+
+impl Error<String, ()> {
+    pub fn from_std_error<E>(e: E) -> Self
+    where
+        E: std::error::Error,
+    {
+        Self {
+            code: ErrorCode::InternalError,
+            message: format!("Unknown error: {}", e),
+            data: None,
+        }
+    }
 }
 
 /// The error codes from and including -32768 to -32000 are reserved for pre-defined errors.
