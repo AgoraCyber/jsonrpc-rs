@@ -105,7 +105,7 @@ struct JSONRPC<S, P, R, D> {
 
 /// When a rpc call encounters an error,
 /// the Response Object MUST contain the error member with a value that is a Object.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, thiserror::Error)]
 pub struct Error<S, D> {
     /// A Number that indicates the error type that occurred.
     pub code: ErrorCode,
