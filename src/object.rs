@@ -1,4 +1,7 @@
+use std::fmt::{Display, Formatter};
+
 use completeq_rs::error::CompleteQError;
+use futures::channel::mpsc::SendError;
 use serde::*;
 
 /// A rpc call is represented by sending a Request object to a Server.  
@@ -120,6 +123,12 @@ pub struct Error<S, D> {
     pub data: Option<D>,
 }
 
+impl Display for Error<String, ()> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RPCError({}) {}", self.code, self.message)
+    }
+}
+
 impl From<serde_json::Error> for Error<String, ()> {
     fn from(err: serde_json::Error) -> Self {
         Self {
@@ -135,6 +144,16 @@ impl From<CompleteQError> for Error<String, ()> {
         Self {
             code: ErrorCode::InternalError,
             message: format!("RPC call channel broken: {}", err),
+            data: None,
+        }
+    }
+}
+
+impl From<SendError> for Error<String, ()> {
+    fn from(err: SendError) -> Self {
+        Self {
+            code: ErrorCode::InternalError,
+            message: format!("RPC send channel broken: {}", err),
             data: None,
         }
     }

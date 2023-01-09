@@ -1,7 +1,15 @@
+// use std::time::Duration;
+
 use std::time::Duration;
 
-use async_std::task::spawn;
-use async_timer::{hashed::Timeout, Timer};
+use async_timer::hashed::Timeout;
+use async_timer::Timer;
+use criterion::Criterion;
+use criterion::{criterion_group, criterion_main};
+
+// This is a struct that tells Criterion.rs to use the "futures" crate's current-thread executor
+use criterion::async_executor::FuturesExecutor;
+
 use futures::{
     channel::mpsc::{self, SendError, Sender},
     executor::ThreadPool,
@@ -41,10 +49,7 @@ impl TransportChannel for MPSCTransportChannel {
     }
 }
 
-#[async_std::test]
-async fn pingpong() -> RPCResult<()> {
-    _ = pretty_env_logger::try_init();
-
+async fn prepare_bench() -> RPCResult<(Server, Client)> {
     let (server_output, client_input) = mpsc::channel(20);
 
     let (client_output, server_input) = mpsc::channel(20);
@@ -62,44 +67,47 @@ async fn pingpong() -> RPCResult<()> {
 
     server.accept(server_transport);
 
-    // spawn(async move {
-    //     server.accept(server_input.map(|c| Ok(c)), server_output);
+    Ok((server, Client::new("Test", client_transport)))
+}
 
-    //     Ok(())
-    // });
-
-    let mut client = Client::new("Test", client_transport);
-
-    let echo: String = client.call("echo", "hello").await?;
-
-    assert_eq!(echo, "hello");
-
+async fn blocking_pingpong(mut client: Client) -> RPCResult<()> {
     let echo: String = client.call("echo", "world").await?;
 
     assert_eq!(echo, "world");
 
-    let echo: String = client
-        .call_with_timer("echo", "hello", Timeout::new(Duration::from_secs(10)))
-        .await?;
+    Ok(())
+}
 
-    assert_eq!(echo, "hello");
-
+async fn timeout_pingpong(mut client: Client) -> RPCResult<()> {
     let echo: String = client
-        .call_with_timer("echo", "world", Timeout::new(Duration::from_secs(10)))
+        .call_with_timer("echo", "world", Timeout::new(Duration::from_secs(5)))
         .await?;
 
     assert_eq!(echo, "world");
 
-    let mut client2 = client.clone();
-
-    spawn(async move {
-        let echo: String = client2.call("echo", "clone_instance").await?;
-
-        assert_eq!(echo, "clone_instance");
-
-        Ok::<(), Error<String, ()>>(())
-    })
-    .await?;
-
     Ok(())
 }
+
+fn call_benchmark(c: &mut Criterion) {
+    let (_server, client) = async_std::task::block_on(async { prepare_bench().await.unwrap() });
+
+    // let mut group = c.benchmark_group("jsonrpc");
+
+    // group.measurement_time(Duration::from_secs(10));
+
+    c.bench_function("blocking pingpong", |b| {
+        b.to_async(FuturesExecutor)
+            .iter(|| blocking_pingpong(client.clone()));
+    });
+
+    c.bench_function("timeout pingpong", |b| {
+        b.to_async(FuturesExecutor)
+            .iter(|| timeout_pingpong(client.clone()));
+    });
+
+    // group.finish();
+}
+
+criterion_group!(benches, call_benchmark);
+
+criterion_main!(benches);

@@ -20,3 +20,9 @@ async-timer = {git="https://github.com/AgoraCyber/async-timer.git"}
 dotenv = "0.15.0"
 pretty_env_logger = "0.4.0"
 async-std = {version = "1.11.0", features = ["attributes", "default"]}
+criterion = {version = "0.4", features = ["async_futures", "html_reports"]}
+
+
+[[bench]]
+harness = false
+name = "rpc_benchmark"
