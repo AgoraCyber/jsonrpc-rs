@@ -2,6 +2,13 @@
 name = "jsonrpc-rs"
 version = "0.1.0"
 edition = "2021"
+license-file = "LICENSE"
+keywords = ["futures-rs", "async","timeout","jsonrpc"]
+description = "Futures base jsonrpc server/client framework"
+documentation = "https://docs.rs/jsonrpc-rs"
+readme = "README.md"
+homepage = "https://github.com/AgoraCyber/jsonrpc-rs"
+repository = "https://github.com/AgoraCyber/jsonrpc-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,8 +20,8 @@ anyhow = "1.0.68"
 log = "0.4.16"
 futures = {version = "0.3.25",features = ["thread-pool"]}
 once_cell = "1.17.0"
-completeq-rs = {git="https://github.com/AgoraCyber/completeq-rs.git"}
-async-timer-rs = {git="https://github.com/AgoraCyber/async-timer.git"}
+completeq-rs = "^0.1"
+async-timer-rs = "^0.1"
 
 [dev-dependencies]
 dotenv = "0.15.0"

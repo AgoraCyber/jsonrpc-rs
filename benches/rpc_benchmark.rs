@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use async_timer::hashed::Timeout;
-use async_timer::Timer;
+use async_timer_rs::hashed::Timeout;
+use async_timer_rs::Timer;
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
 

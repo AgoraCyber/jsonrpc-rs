@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use async_std::task::spawn;
-use async_timer::{hashed::Timeout, Timer};
+use async_timer_rs::{hashed::Timeout, Timer};
 use futures::{
     channel::mpsc::{self, SendError, Sender},
     executor::ThreadPool,

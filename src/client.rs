@@ -1,7 +1,7 @@
 mod recv;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use async_timer::{hashed::Timeout, Timer};
+use async_timer_rs::{hashed::Timeout, Timer};
 use completeq_rs::oneshot::EventReceiver;
 use futures::{
     channel::mpsc::{self, Sender},
