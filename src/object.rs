@@ -162,7 +162,7 @@ impl From<SendError> for Error<String, ()> {
 impl Error<String, ()> {
     pub fn from_std_error<E>(e: E) -> Self
     where
-        E: std::error::Error,
+        E: Display,
     {
         Self {
             code: ErrorCode::InternalError,
@@ -170,6 +170,14 @@ impl Error<String, ()> {
             data: None,
         }
     }
+}
+
+/// Maping other error type to JSONRPC [`Error`]
+pub fn map_error<E>(err: E) -> Error<String, ()>
+where
+    E: Display,
+{
+    Error::<String, ()>::from_std_error(err)
 }
 
 /// The error codes from and including -32768 to -32000 are reserved for pre-defined errors.
