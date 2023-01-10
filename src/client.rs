@@ -42,6 +42,7 @@ impl Client {
             client_id.clone(),
             output,
             output_receiver,
+            completed_q.clone(),
         ));
 
         C::spawn(recv_loop::<C, String>(
