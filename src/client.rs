@@ -18,7 +18,7 @@ use crate::{channel::TransportChannel, Error, RPCResult, Request};
 
 #[derive(Clone)]
 pub struct Client {
-    output_sender: Sender<String>,
+    output_sender: Sender<Vec<u8>>,
     completed_q: RPCCompletedQ,
 }
 
@@ -70,7 +70,7 @@ impl Client {
             ..Default::default()
         };
 
-        let data = serde_json::to_string(&request).expect("Inner error, assembly json request");
+        let data = serde_json::to_vec(&request).expect("Inner error, assembly json request");
 
         self.output_sender
             .send(data)
@@ -109,7 +109,7 @@ impl Client {
             ..Default::default()
         };
 
-        let data = serde_json::to_string(&request).expect("Inner error, assembly json request");
+        let data = serde_json::to_vec(&request).expect("Inner error, assembly json request");
 
         self.output_sender
             .send(data)
@@ -148,7 +148,7 @@ impl Client {
             ..Default::default()
         };
 
-        let data = serde_json::to_string(&request)?;
+        let data = serde_json::to_vec(&request)?;
 
         self.output_sender
             .send(data)

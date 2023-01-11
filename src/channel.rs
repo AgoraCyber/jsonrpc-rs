@@ -11,9 +11,9 @@ pub trait TransportChannel: 'static {
     type StreamError: std::error::Error + 'static + Sync + Send;
 
     /// Input stream must support [`Send`] + [`Sync`]
-    type Input: Stream<Item = Result<String, Self::StreamError>> + Unpin + Send + 'static;
+    type Input: Stream<Item = Result<Vec<u8>, Self::StreamError>> + Unpin + Send + 'static;
 
-    type Output: Sink<String, Error = Self::SinkError> + Unpin + Send + 'static;
+    type Output: Sink<Vec<u8>, Error = Self::SinkError> + Unpin + Send + 'static;
 
     fn spawn<Fut>(future: Fut)
     where

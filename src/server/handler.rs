@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{ErrorCode, Response};
 
 pub type ServerHandler = Box<
-    dyn FnMut(Option<usize>, serde_json::Value) -> Result<Option<String>, ErrorCode>
+    dyn FnMut(Option<usize>, serde_json::Value) -> Result<Option<Vec<u8>>, ErrorCode>
         + Sync
         + Send
         + 'static,
@@ -19,7 +19,7 @@ pub type AsyncServerHandler = Box<
     dyn FnMut(
             Option<usize>,
             serde_json::Value,
-        ) -> BoxFuture<'static, Result<Option<String>, ErrorCode>>
+        ) -> BoxFuture<'static, Result<Option<Vec<u8>>, ErrorCode>>
         + Sync
         + Send
         + 'static,
@@ -96,7 +96,7 @@ where
                     ..Default::default()
                 };
 
-                let result = serde_json::to_string(&resp).map_err(|e| {
+                let result = serde_json::to_vec(&resp).map_err(|e| {
                     log::error!(
                         "parse method({}) response error: {}\r\t origin: {}",
                         method,
@@ -128,7 +128,7 @@ where
 {
     let handler = move |id,
                         value: serde_json::Value|
-          -> BoxFuture<'static, Result<Option<String>, ErrorCode>> {
+          -> BoxFuture<'static, Result<Option<Vec<u8>>, ErrorCode>> {
         let mut f_call = f.clone();
         let method_name = method.clone();
         Box::pin(async move {
@@ -152,7 +152,7 @@ where
                         ..Default::default()
                     };
 
-                    let result = serde_json::to_string(&resp).map_err(|e| {
+                    let result = serde_json::to_vec(&resp).map_err(|e| {
                         log::error!(
                             "parse method({}) response error: {}\r\t origin: {}",
                             method_name,
@@ -166,7 +166,7 @@ where
                 }
             }
 
-            Ok::<Option<String>, ErrorCode>(None)
+            Ok::<Option<Vec<u8>>, ErrorCode>(None)
         })
     };
 

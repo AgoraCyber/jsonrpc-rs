@@ -35,7 +35,7 @@ impl<C: TransportChannel> ServiceSession<C> {
             .await
             .map_err(|err| Error::<String, ()>::from_std_error(err))?
         {
-            let request = serde_json::from_str::<Request<&str, serde_json::Value>>(&next)?;
+            let request = serde_json::from_slice::<Request<&str, serde_json::Value>>(&next)?;
 
             if let Some(mut handler) = self.methods.clone_from(request.method) {
                 self.handle_resp(
@@ -63,7 +63,7 @@ impl<C: TransportChannel> ServiceSession<C> {
         &mut self,
         id: Option<usize>,
         method: &str,
-        result: Result<Option<String>, ErrorCode>,
+        result: Result<Option<Vec<u8>>, ErrorCode>,
     ) -> RPCResult<()> {
         match result {
             Ok(Some(response)) => {
@@ -89,7 +89,7 @@ impl<C: TransportChannel> ServiceSession<C> {
         Ok(())
     }
 
-    fn new_error_resp(id: usize, code: ErrorCode, message: Option<String>) -> String {
+    fn new_error_resp(id: usize, code: ErrorCode, message: Option<String>) -> Vec<u8> {
         let response = Response::<String, (), ()> {
             id,
             error: Some(Error {
@@ -100,6 +100,6 @@ impl<C: TransportChannel> ServiceSession<C> {
             ..Default::default()
         };
 
-        serde_json::to_string(&response).expect("Inner error, serialize jsonrpc response")
+        serde_json::to_vec(&response).expect("Inner error, serialize jsonrpc response")
     }
 }

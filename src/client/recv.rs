@@ -22,7 +22,7 @@ pub async fn recv_loop<C: TransportChannel, S: AsRef<str>>(
             }
         };
 
-        let response = serde_json::from_str::<Response<String, serde_json::Value, ()>>(&data)
+        let response = serde_json::from_slice::<Response<String, serde_json::Value, ()>>(&data)
             .map_err(|e| Error::<String, ()>::from(e))?;
 
         if let Some(result) = response.result {
