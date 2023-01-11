@@ -62,7 +62,7 @@ impl Client {
 
     pub async fn send<P>(&mut self, method: &str, params: P) -> RPCResult<Responser<Timeout>>
     where
-        P: Default + Serialize,
+        P: Serialize,
     {
         let receiver = self.completed_q.wait_one();
 
@@ -70,7 +70,7 @@ impl Client {
             id: Some(receiver.event_id()),
             method,
             params,
-            ..Default::default()
+            jsonrpc: crate::Version::default(),
         };
 
         let data = serde_json::to_vec(&request).expect("Inner error, assembly json request");
@@ -87,7 +87,7 @@ impl Client {
 
     pub async fn call<P, R>(&mut self, method: &str, params: P) -> RPCResult<R>
     where
-        P: Default + Serialize,
+        P: Serialize,
         for<'b> R: Deserialize<'b> + Send + 'static,
     {
         self.send(method, params).await?.recv().await
@@ -100,7 +100,7 @@ impl Client {
         timer: T,
     ) -> RPCResult<Responser<T>>
     where
-        P: Default + Serialize,
+        P: Serialize,
         T: Timer + Unpin + 'static,
     {
         let receiver = self.completed_q.wait_one_with_timer(timer);
@@ -109,7 +109,7 @@ impl Client {
             id: Some(receiver.event_id()),
             method,
             params,
-            ..Default::default()
+            jsonrpc: crate::Version::default(),
         };
 
         let data = serde_json::to_vec(&request).expect("Inner error, assembly json request");
@@ -132,7 +132,7 @@ impl Client {
     ) -> RPCResult<R>
     where
         T: Timer + Unpin + 'static,
-        P: Default + Serialize,
+        P: Serialize,
         for<'b> R: Deserialize<'b> + Send + 'static,
     {
         self.send_with_timer(method, params, timer)
@@ -143,12 +143,13 @@ impl Client {
 
     pub async fn notification<P>(&mut self, method: &str, params: P) -> RPCResult<()>
     where
-        P: Default + Serialize,
+        P: Serialize,
     {
         let request = Request {
             method,
             params,
-            ..Default::default()
+            id: None,
+            jsonrpc: crate::Version::default(),
         };
 
         let data = serde_json::to_vec(&request)?;
