@@ -18,13 +18,14 @@ use futures::{
     StreamExt,
 };
 use jsonrpc_rs::channel::RPCData;
-use jsonrpc_rs::{channel::TransportChannel, Client, Error, RPCResult, Server};
+use jsonrpc_rs::RPCError;
+use jsonrpc_rs::{channel::TransportChannel, Client, RPCResult, Server};
 use once_cell::sync::OnceCell;
 
 struct MPSCTransportChannel(BoxStream<'static, RPCResult<RPCData>>, Sender<RPCData>);
 
 impl TransportChannel for MPSCTransportChannel {
-    type StreamError = Error<String, ()>;
+    type StreamError = RPCError;
 
     type SinkError = SendError;
 

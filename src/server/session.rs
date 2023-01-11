@@ -2,7 +2,7 @@ use futures::{SinkExt, TryStreamExt};
 
 use crate::{
     channel::{RPCData, TransportChannel},
-    Error, ErrorCode, RPCResult, Request, Response,
+    map_error, Error, ErrorCode, RPCResult, Request, Response,
 };
 
 use super::handler::*;
@@ -32,12 +32,7 @@ impl<C: TransportChannel> ServiceSession<C> {
         }
     }
     pub async fn run(&mut self) -> RPCResult<()> {
-        while let Some(next) = self
-            .input
-            .try_next()
-            .await
-            .map_err(|err| Error::<String, ()>::from_std_error(err))?
-        {
+        while let Some(next) = self.input.try_next().await.map_err(map_error)? {
             let request = serde_json::from_slice::<Request<&str, serde_json::Value>>(&next)?;
 
             if let Some(mut handler) = self.methods.clone_from(request.method) {
@@ -70,18 +65,12 @@ impl<C: TransportChannel> ServiceSession<C> {
     ) -> RPCResult<()> {
         match result {
             Ok(Some(response)) => {
-                self.output
-                    .send(response)
-                    .await
-                    .map_err(|err| Error::<String, ()>::from_std_error(err))?;
+                self.output.send(response).await.map_err(map_error)?;
             }
             Err(code) => {
                 if let Some(id) = id {
                     let resp = Self::new_error_resp(id, code, None);
-                    self.output
-                        .send(resp)
-                        .await
-                        .map_err(|err| Error::<String, ()>::from_std_error(err))?;
+                    self.output.send(resp).await.map_err(map_error)?;
                 } else {
                     log::trace!("Method {} call return error, {}", method, code);
                 }

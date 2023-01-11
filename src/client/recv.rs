@@ -1,6 +1,6 @@
 use futures::TryStreamExt;
 
-use crate::{channel::TransportChannel, Error, RPCResult, Response};
+use crate::{channel::TransportChannel, map_error, RPCResult, Response};
 
 use super::user_event::RPCCompletedQ;
 
@@ -22,13 +22,22 @@ pub async fn recv_loop<C: TransportChannel, S: AsRef<str>>(
             }
         };
 
-        let response = serde_json::from_slice::<Response<String, serde_json::Value, ()>>(&data)
-            .map_err(|e| Error::<String, ()>::from(e))?;
+        let response =
+            serde_json::from_slice::<Response<String, serde_json::Value, serde_json::Value>>(&data)
+                .map_err(map_error);
 
-        if let Some(result) = response.result {
-            completed_q.complete_one(response.id, Ok(result));
-        } else if let Some(err) = response.error {
-            completed_q.complete_one(response.id, Err(err));
+        match response {
+            Ok(response) => {
+                if let Some(result) = response.result {
+                    completed_q.complete_one(response.id, Ok(result));
+                } else if let Some(err) = response.error {
+                    completed_q.complete_one(response.id, Err(err));
+                }
+            }
+            Err(err) => {
+                completed_q.cancel_all();
+                return Err(err);
+            }
         }
     }
 

@@ -123,13 +123,13 @@ pub struct Error<S, D> {
     pub data: Option<D>,
 }
 
-impl Display for Error<String, ()> {
+impl Display for Error<String, serde_json::Value> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "RPCError({}) {}", self.code, self.message)
     }
 }
 
-impl From<serde_json::Error> for Error<String, ()> {
+impl From<serde_json::Error> for Error<String, serde_json::Value> {
     fn from(err: serde_json::Error) -> Self {
         Self {
             code: ErrorCode::ParseError,
@@ -139,7 +139,7 @@ impl From<serde_json::Error> for Error<String, ()> {
     }
 }
 
-impl From<CompleteQError> for Error<String, ()> {
+impl From<CompleteQError> for Error<String, serde_json::Value> {
     fn from(err: CompleteQError) -> Self {
         Self {
             code: ErrorCode::InternalError,
@@ -149,7 +149,7 @@ impl From<CompleteQError> for Error<String, ()> {
     }
 }
 
-impl From<SendError> for Error<String, ()> {
+impl From<SendError> for Error<String, serde_json::Value> {
     fn from(err: SendError) -> Self {
         Self {
             code: ErrorCode::InternalError,
@@ -159,7 +159,7 @@ impl From<SendError> for Error<String, ()> {
     }
 }
 
-impl Error<String, ()> {
+impl Error<String, serde_json::Value> {
     pub fn from_std_error<E>(e: E) -> Self
     where
         E: Display,
@@ -173,11 +173,11 @@ impl Error<String, ()> {
 }
 
 /// Maping other error type to JSONRPC [`Error`]
-pub fn map_error<E>(err: E) -> Error<String, ()>
+pub fn map_error<E>(err: E) -> Error<String, serde_json::Value>
 where
     E: Display,
 {
-    Error::<String, ()>::from_std_error(err)
+    Error::<String, serde_json::Value>::from_std_error(err)
 }
 
 /// The error codes from and including -32768 to -32000 are reserved for pre-defined errors.
@@ -233,7 +233,7 @@ impl<'de> serde::Deserialize<'de> for ErrorCode {
             -32603 => Ok(ErrorCode::InternalError),
             _ => {
                 // Check reserved implementation-defined server-errors range.
-                if code > -32000 && code < -32099 {
+                if code <= -32000 && code >= -32099 {
                     Ok(ErrorCode::ServerError(code, "".to_owned()))
                 } else {
                     Err(anyhow::format_err!("Invalid JSONRPC error code {}", code))

@@ -11,14 +11,14 @@ use futures::{
 };
 use jsonrpc_rs::{
     channel::{RPCData, TransportChannel},
-    Client, Error, RPCResult, Server,
+    Client, RPCError, RPCResult, Server,
 };
 use once_cell::sync::OnceCell;
 
 struct MPSCTransportChannel(BoxStream<'static, RPCResult<RPCData>>, Sender<RPCData>);
 
 impl TransportChannel for MPSCTransportChannel {
-    type StreamError = Error<String, ()>;
+    type StreamError = RPCError;
 
     type SinkError = SendError;
 
@@ -100,7 +100,7 @@ async fn pingpong() -> RPCResult<()> {
 
         assert_eq!(echo, "clone_instance");
 
-        Ok::<(), Error<String, ()>>(())
+        Ok::<(), RPCError>(())
     })
     .await?;
 

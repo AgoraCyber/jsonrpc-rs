@@ -16,7 +16,7 @@ use user_event::*;
 
 use crate::{
     channel::{RPCData, TransportChannel},
-    Error, RPCResult, Request,
+    map_error, RPCResult, Request,
 };
 
 #[derive(Clone)]
@@ -78,7 +78,7 @@ impl Client {
         self.output_sender
             .send(data.into())
             .await
-            .map_err(|e| Error::<String, ()>::from(e))?;
+            .map_err(map_error)?;
 
         Ok(Responser {
             receiver: Some(receiver),
@@ -117,7 +117,7 @@ impl Client {
         self.output_sender
             .send(data.into())
             .await
-            .map_err(|e| Error::<String, ()>::from(e))?;
+            .map_err(map_error)?;
 
         Ok(Responser {
             receiver: Some(receiver),
@@ -156,7 +156,7 @@ impl Client {
         self.output_sender
             .send(data.into())
             .await
-            .map_err(|e| Error::<String, ()>::from(e))?;
+            .map_err(map_error)?;
 
         Ok(())
     }
@@ -180,8 +180,8 @@ where
             .unwrap()
             .await
             .success()
-            .map_err(|err| Error::<String, ()>::from(err))??;
+            .map_err(map_error)??;
 
-        serde_json::from_value(value.clone()).map_err(|e| Error::<String, ()>::from(e))
+        serde_json::from_value(value.clone()).map_err(map_error)
     }
 }

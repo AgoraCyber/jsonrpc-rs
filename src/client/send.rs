@@ -2,7 +2,7 @@ use futures::{channel::mpsc::Receiver, SinkExt, StreamExt};
 
 use crate::{
     channel::{RPCData, TransportChannel},
-    Error, RPCResult, Request,
+    map_error, RPCResult, Request,
 };
 
 use super::user_event::RPCCompletedQ;
@@ -22,7 +22,7 @@ pub async fn send_loop<C: TransportChannel, S: AsRef<str>>(
                 log::error!("RPC client send msg error, {}", err);
 
                 if let Some(id) = request.id {
-                    completed_q.complete_one(id, Err(Error::<String, ()>::from_std_error(err)));
+                    completed_q.complete_one(id, Err(map_error(err)));
                 }
             }
             _ => {}
