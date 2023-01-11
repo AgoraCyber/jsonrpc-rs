@@ -1,13 +1,16 @@
 use futures::{channel::mpsc::Receiver, SinkExt, StreamExt};
 
-use crate::{channel::TransportChannel, Error, RPCResult, Request};
+use crate::{
+    channel::{RPCData, TransportChannel},
+    Error, RPCResult, Request,
+};
 
 use super::user_event::RPCCompletedQ;
 
 pub async fn send_loop<C: TransportChannel, S: AsRef<str>>(
     client_id: S,
     mut output: C::Output,
-    mut output_receiver: Receiver<Vec<u8>>,
+    mut output_receiver: Receiver<RPCData>,
     completed_q: RPCCompletedQ,
 ) -> RPCResult<()> {
     while let Some(item) = output_receiver.next().await {

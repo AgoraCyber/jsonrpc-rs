@@ -3,6 +3,12 @@ use std::future::Future;
 
 use crate::RPCResult;
 
+/// Transport input item
+pub type TransportInput<E> = Result<RPCData, E>;
+
+/// Transport output item.
+pub type RPCData = bytes::Bytes;
+
 /// Define abstract transport channel for [`crate::Client`] and [`crate::Server`]
 pub trait TransportChannel: 'static {
     /// Transport channel error type.
@@ -11,9 +17,9 @@ pub trait TransportChannel: 'static {
     type StreamError: std::error::Error + 'static + Sync + Send;
 
     /// Input stream must support [`Send`] + [`Sync`]
-    type Input: Stream<Item = Result<Vec<u8>, Self::StreamError>> + Unpin + Send + 'static;
+    type Input: Stream<Item = TransportInput<Self::StreamError>> + Unpin + Send + 'static;
 
-    type Output: Sink<Vec<u8>, Error = Self::SinkError> + Unpin + Send + 'static;
+    type Output: Sink<RPCData, Error = Self::SinkError> + Unpin + Send + 'static;
 
     fn spawn<Fut>(future: Fut)
     where

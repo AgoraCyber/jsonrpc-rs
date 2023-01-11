@@ -17,19 +17,20 @@ use futures::{
     task::SpawnExt,
     StreamExt,
 };
+use jsonrpc_rs::channel::RPCData;
 use jsonrpc_rs::{channel::TransportChannel, Client, Error, RPCResult, Server};
 use once_cell::sync::OnceCell;
 
-struct MPSCTransportChannel(BoxStream<'static, RPCResult<Vec<u8>>>, Sender<Vec<u8>>);
+struct MPSCTransportChannel(BoxStream<'static, RPCResult<RPCData>>, Sender<RPCData>);
 
 impl TransportChannel for MPSCTransportChannel {
     type StreamError = Error<String, ()>;
 
     type SinkError = SendError;
 
-    type Input = BoxStream<'static, RPCResult<Vec<u8>>>;
+    type Input = BoxStream<'static, RPCResult<RPCData>>;
 
-    type Output = Sender<Vec<u8>>;
+    type Output = Sender<RPCData>;
 
     fn spawn<Fut>(future: Fut)
     where

@@ -10,3 +10,5 @@ mod result;
 pub use result::*;
 
 pub mod channel;
+
+pub use channel::RPCData;

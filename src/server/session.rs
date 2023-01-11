@@ -1,6 +1,9 @@
 use futures::{SinkExt, TryStreamExt};
 
-use crate::{channel::TransportChannel, Error, ErrorCode, RPCResult, Request, Response};
+use crate::{
+    channel::{RPCData, TransportChannel},
+    Error, ErrorCode, RPCResult, Request, Response,
+};
 
 use super::handler::*;
 
@@ -63,7 +66,7 @@ impl<C: TransportChannel> ServiceSession<C> {
         &mut self,
         id: Option<usize>,
         method: &str,
-        result: Result<Option<Vec<u8>>, ErrorCode>,
+        result: Result<Option<RPCData>, ErrorCode>,
     ) -> RPCResult<()> {
         match result {
             Ok(Some(response)) => {
@@ -89,7 +92,7 @@ impl<C: TransportChannel> ServiceSession<C> {
         Ok(())
     }
 
-    fn new_error_resp(id: usize, code: ErrorCode, message: Option<String>) -> Vec<u8> {
+    fn new_error_resp(id: usize, code: ErrorCode, message: Option<String>) -> RPCData {
         let response = Response::<String, (), ()> {
             id,
             error: Some(Error {
@@ -100,6 +103,8 @@ impl<C: TransportChannel> ServiceSession<C> {
             ..Default::default()
         };
 
-        serde_json::to_vec(&response).expect("Inner error, serialize jsonrpc response")
+        serde_json::to_vec(&response)
+            .expect("Inner error, serialize jsonrpc response")
+            .into()
     }
 }

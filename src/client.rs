@@ -14,11 +14,14 @@ mod user_event;
 use serde::{Deserialize, Serialize};
 use user_event::*;
 
-use crate::{channel::TransportChannel, Error, RPCResult, Request};
+use crate::{
+    channel::{RPCData, TransportChannel},
+    Error, RPCResult, Request,
+};
 
 #[derive(Clone)]
 pub struct Client {
-    output_sender: Sender<Vec<u8>>,
+    output_sender: Sender<RPCData>,
     completed_q: RPCCompletedQ,
 }
 
@@ -73,7 +76,7 @@ impl Client {
         let data = serde_json::to_vec(&request).expect("Inner error, assembly json request");
 
         self.output_sender
-            .send(data)
+            .send(data.into())
             .await
             .map_err(|e| Error::<String, ()>::from(e))?;
 
@@ -112,7 +115,7 @@ impl Client {
         let data = serde_json::to_vec(&request).expect("Inner error, assembly json request");
 
         self.output_sender
-            .send(data)
+            .send(data.into())
             .await
             .map_err(|e| Error::<String, ()>::from(e))?;
 
@@ -151,7 +154,7 @@ impl Client {
         let data = serde_json::to_vec(&request)?;
 
         self.output_sender
-            .send(data)
+            .send(data.into())
             .await
             .map_err(|e| Error::<String, ()>::from(e))?;
 
