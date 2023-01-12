@@ -28,13 +28,21 @@ pub async fn recv_loop<C: TransportChannel, S: AsRef<str>>(
 
         match response {
             Ok(response) => {
+                log::error!("parsed response: {:?}", response);
                 if let Some(result) = response.result {
+                    log::error!("response {} with result: {}", response.id, result);
                     completed_q.complete_one(response.id, Ok(result));
                 } else if let Some(err) = response.error {
+                    log::error!("response {} with error: {}", response.id, err);
                     completed_q.complete_one(response.id, Err(err));
+                } else {
+                    completed_q.complete_one(response.id, Ok(serde_json::Value::Null));
+                    log::error!("response {} with null result", response.id);
                 }
             }
             Err(err) => {
+                log::error!("parse response error,{}", err);
+                log::error!("response {}", String::from_utf8_lossy(&data));
                 completed_q.cancel_all();
                 return Err(err);
             }
