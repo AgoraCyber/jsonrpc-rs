@@ -72,7 +72,15 @@ where
     for<'a> P: Deserialize<'a> + Serialize,
     R: Serialize + Default,
 {
-    let handler = move |id, value: serde_json::Value| {
+    let handler = move |id, mut value: serde_json::Value| {
+        log::trace!("try call method `{}` with params {}", method, value);
+
+        if value.is_array() {
+            if value.as_array().unwrap().len() == 1 {
+                value = value.as_array().unwrap()[0].clone();
+            }
+        }
+
         let request = serde_json::from_value(value.clone()).map_err(|e| {
             log::error!(
                 "parse method({}) params error: {}\r\t origin: {}",
@@ -132,22 +140,22 @@ where
     R: Serialize + Default,
 {
     let handler =
-        move |id, value: serde_json::Value| -> BoxFuture<'static, RPCResult<Option<RPCData>>> {
+        move |id, mut value: serde_json::Value| -> BoxFuture<'static, RPCResult<Option<RPCData>>> {
             let mut f_call = f.clone();
             let method_name = method.clone();
             Box::pin(async move {
-                let request = serde_json::from_value(value.clone()).map_err(|e| {
-                    log::error!(
-                        "parse method({}) params error: {}\r\t origin: {}",
-                        method_name,
-                        e,
-                        value
-                    );
-                    RPCError {
-                        code: ErrorCode::InvalidParams,
-                        message: format!("{}", e),
-                        data: None,
+                log::trace!("try call method `{}` with params {}", method_name, value);
+
+                if value.is_array() {
+                    if value.as_array().unwrap().len() == 1 {
+                        value = value.as_array().unwrap()[0].clone();
                     }
+                }
+
+                let request = serde_json::from_value(value).map_err(|e| RPCError {
+                    code: ErrorCode::InvalidParams,
+                    message: format!("{}", e),
+                    data: None,
                 })?;
 
                 let response = f_call(request).await?;
@@ -160,18 +168,10 @@ where
                             ..Default::default()
                         };
 
-                        let result = serde_json::to_vec(&resp).map_err(|e| {
-                            log::error!(
-                                "parse method({}) response error: {}\r\t origin: {}",
-                                method_name,
-                                e,
-                                value
-                            );
-                            RPCError {
-                                code: ErrorCode::InternalError,
-                                message: "Internal error".to_owned(),
-                                data: None,
-                            }
+                        let result = serde_json::to_vec(&resp).map_err(|_| RPCError {
+                            code: ErrorCode::InternalError,
+                            message: "Internal error".to_owned(),
+                            data: None,
                         })?;
 
                         return Ok(Some(result.into()));

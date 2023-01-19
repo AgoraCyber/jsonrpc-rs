@@ -44,6 +44,8 @@ impl Server {
     /// Register jsonrpc server async handler
     ///
     /// The register async handler be required to implement [`Clone`] trait.
+    ///
+    ///
     pub fn async_handle<P, R, F, FR>(&mut self, method: &'static str, f: F) -> &mut Self
     where
         F: FnMut(P) -> FR + 'static + Sync + Send + Clone,

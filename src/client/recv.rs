@@ -49,6 +49,8 @@ pub async fn recv_loop<C: TransportChannel, S: AsRef<str>>(
         }
     }
 
+    completed_q.cancel_all();
+
     log::info!("rpc client {} recv_loop stop.", client_id.as_ref());
 
     Ok(())
