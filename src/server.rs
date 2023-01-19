@@ -8,7 +8,7 @@ use session::ServiceSession;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{channel::TransportChannel, ErrorCode};
+use crate::{channel::TransportChannel, RPCResult};
 
 /// JSONRPC server context structure.
 ///
@@ -30,9 +30,9 @@ impl Server {
         }
     }
     /// Register jsonrpc server sync handler
-    pub fn handle<P, R, F>(self, method: &'static str, f: F) -> Self
+    pub fn handle<P, R, F>(&mut self, method: &'static str, f: F) -> &mut Self
     where
-        F: FnMut(P) -> Result<Option<R>, ErrorCode> + 'static + Clone + Sync + Send,
+        F: FnMut(P) -> RPCResult<Option<R>> + 'static + Clone + Sync + Send,
         for<'a> P: Deserialize<'a> + Serialize,
         R: Serialize + Default,
     {
@@ -44,10 +44,10 @@ impl Server {
     /// Register jsonrpc server async handler
     ///
     /// The register async handler be required to implement [`Clone`] trait.
-    pub fn async_handle<P, R, F, FR>(self, method: &'static str, f: F) -> Self
+    pub fn async_handle<P, R, F, FR>(&mut self, method: &'static str, f: F) -> &mut Self
     where
         F: FnMut(P) -> FR + 'static + Sync + Send + Clone,
-        FR: std::future::Future<Output = Result<Option<R>, ErrorCode>> + Sync + Send + 'static,
+        FR: std::future::Future<Output = RPCResult<Option<R>>> + Sync + Send + 'static,
         for<'a> P: Deserialize<'a> + Serialize + Send,
         R: Serialize + Default,
     {

@@ -60,7 +60,9 @@ async fn prepare_bench() -> RPCResult<(Server, Client)> {
 
     let client_transport = MPSCTransportChannel(client_input.map(|c| Ok(c)).boxed(), client_output);
 
-    let mut server = Server::default()
+    let mut server = Server::default();
+
+    server
         .async_handle("echo", |msg: String| async { Ok(Some(msg)) })
         .handle("event", |msg: String| {
             log::debug!("{}", msg);

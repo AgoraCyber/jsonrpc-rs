@@ -6,20 +6,17 @@ use std::{
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 
-use crate::{channel::RPCData, ErrorCode, Response};
+use crate::{channel::RPCData, ErrorCode, RPCError, RPCResult, Response};
 
 pub type ServerHandler = Box<
-    dyn FnMut(Option<usize>, serde_json::Value) -> Result<Option<RPCData>, ErrorCode>
+    dyn FnMut(Option<usize>, serde_json::Value) -> RPCResult<Option<RPCData>>
         + Sync
         + Send
         + 'static,
 >;
 
 pub type AsyncServerHandler = Box<
-    dyn FnMut(
-            Option<usize>,
-            serde_json::Value,
-        ) -> BoxFuture<'static, Result<Option<RPCData>, ErrorCode>>
+    dyn FnMut(Option<usize>, serde_json::Value) -> BoxFuture<'static, RPCResult<Option<RPCData>>>
         + Sync
         + Send
         + 'static,
@@ -71,7 +68,7 @@ impl<Handler> HandlerClonerRegister<Handler> {
 
 pub(crate) fn to_handler<P, R, F>(method: &'static str, mut f: F) -> HandlerCloner<ServerHandler>
 where
-    F: FnMut(P) -> Result<Option<R>, ErrorCode> + 'static + Clone + Sync + Send,
+    F: FnMut(P) -> RPCResult<Option<R>> + 'static + Clone + Sync + Send,
     for<'a> P: Deserialize<'a> + Serialize,
     R: Serialize + Default,
 {
@@ -83,7 +80,11 @@ where
                 e,
                 value
             );
-            ErrorCode::InvalidParams
+            RPCError {
+                code: ErrorCode::InvalidParams,
+                message: format!("{}", e),
+                data: None,
+            }
         })?;
 
         let response = f(request)?;
@@ -103,7 +104,11 @@ where
                         e,
                         value
                     );
-                    ErrorCode::InternalError
+                    RPCError {
+                        code: ErrorCode::InternalError,
+                        message: "Internal error".to_owned(),
+                        data: None,
+                    }
                 })?;
 
                 return Ok(Some(result.into()));
@@ -122,53 +127,60 @@ pub(crate) fn to_async_handler<P, R, F, FR>(
 ) -> HandlerCloner<AsyncServerHandler>
 where
     F: FnMut(P) -> FR + 'static + Sync + Send + Clone,
-    FR: std::future::Future<Output = Result<Option<R>, ErrorCode>> + Sync + Send + 'static,
+    FR: std::future::Future<Output = RPCResult<Option<R>>> + Sync + Send + 'static,
     for<'a> P: Deserialize<'a> + Serialize + Send,
     R: Serialize + Default,
 {
-    let handler = move |id,
-                        value: serde_json::Value|
-          -> BoxFuture<'static, Result<Option<RPCData>, ErrorCode>> {
-        let mut f_call = f.clone();
-        let method_name = method.clone();
-        Box::pin(async move {
-            let request = serde_json::from_value(value.clone()).map_err(|e| {
-                log::error!(
-                    "parse method({}) params error: {}\r\t origin: {}",
-                    method_name,
-                    e,
-                    value
-                );
-                ErrorCode::InvalidParams
-            })?;
+    let handler =
+        move |id, value: serde_json::Value| -> BoxFuture<'static, RPCResult<Option<RPCData>>> {
+            let mut f_call = f.clone();
+            let method_name = method.clone();
+            Box::pin(async move {
+                let request = serde_json::from_value(value.clone()).map_err(|e| {
+                    log::error!(
+                        "parse method({}) params error: {}\r\t origin: {}",
+                        method_name,
+                        e,
+                        value
+                    );
+                    RPCError {
+                        code: ErrorCode::InvalidParams,
+                        message: format!("{}", e),
+                        data: None,
+                    }
+                })?;
 
-            let response = f_call(request).await?;
+                let response = f_call(request).await?;
 
-            if let Some(id) = id {
-                if let Some(r) = response {
-                    let resp = Response::<String, R, ()> {
-                        id,
-                        result: Some(r),
-                        ..Default::default()
-                    };
+                if let Some(id) = id {
+                    if let Some(r) = response {
+                        let resp = Response::<String, R, ()> {
+                            id,
+                            result: Some(r),
+                            ..Default::default()
+                        };
 
-                    let result = serde_json::to_vec(&resp).map_err(|e| {
-                        log::error!(
-                            "parse method({}) response error: {}\r\t origin: {}",
-                            method_name,
-                            e,
-                            value
-                        );
-                        ErrorCode::InternalError
-                    })?;
+                        let result = serde_json::to_vec(&resp).map_err(|e| {
+                            log::error!(
+                                "parse method({}) response error: {}\r\t origin: {}",
+                                method_name,
+                                e,
+                                value
+                            );
+                            RPCError {
+                                code: ErrorCode::InternalError,
+                                message: "Internal error".to_owned(),
+                                data: None,
+                            }
+                        })?;
 
-                    return Ok(Some(result.into()));
+                        return Ok(Some(result.into()));
+                    }
                 }
-            }
 
-            Ok::<Option<RPCData>, ErrorCode>(None)
-        })
-    };
+                Ok::<Option<RPCData>, RPCError>(None)
+            })
+        };
 
     Box::new(move || Box::new(handler.clone()))
 }

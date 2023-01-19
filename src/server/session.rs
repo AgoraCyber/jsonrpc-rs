@@ -61,7 +61,7 @@ impl<C: TransportChannel> ServiceSession<C> {
         &mut self,
         id: Option<usize>,
         method: &str,
-        result: Result<Option<RPCData>, ErrorCode>,
+        result: RPCResult<Option<RPCData>>,
     ) -> RPCResult<()> {
         match result {
             Ok(Some(response)) => {
@@ -69,7 +69,7 @@ impl<C: TransportChannel> ServiceSession<C> {
             }
             Err(code) => {
                 if let Some(id) = id {
-                    let resp = Self::new_error_resp(id, code, None);
+                    let resp = Self::new_error_resp(id, code.code, Some(code.message));
                     self.output.send(resp).await.map_err(map_error)?;
                 } else {
                     log::trace!("Method {} call return error, {}", method, code);
