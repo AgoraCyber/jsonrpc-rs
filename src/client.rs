@@ -2,7 +2,7 @@ mod recv;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_timer_rs::{hashed::Timeout, Timer};
-use completeq_rs::oneshot::EventReceiver;
+use completeq_rs::{error::CompleteQError, oneshot::EventReceiver};
 use futures::{
     channel::mpsc::{self, Sender},
     SinkExt,
@@ -181,7 +181,8 @@ where
             .unwrap()
             .await
             .success()
-            .map_err(map_error)??;
+            .map_err(map_error)?
+            .ok_or(CompleteQError::PipeBroken)??;
 
         serde_json::from_value(value.clone()).map_err(map_error)
     }
